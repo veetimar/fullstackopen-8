@@ -5,36 +5,41 @@ const resolvers = {
   Query: {
     bookCount: () => Book.collection.countDocuments(),
     authorCount: () => Author.collection.countDocuments(),
-    allBooks: (root, args) => { // not with parameters
-      return Book.find({}).populate('author').exec()
+    allBooks: async (root, args) => {
+      let books = await Book.find({}).populate('author')
+      if (args.author) {
+        books = books.filter(b => b.author.name === args.author)
+      }
+      if (args.genre) {
+        books = books.filter(b => b.genres.includes(args.genre))
+      }
+      return books
     },
     allAuthors: () => Author.find({}).exec(),
   },
   Mutation: {
     addBook: async (root, args) => {
-      let author = await Author.find({ name: args.author })
-      if (author.length !== 0) {
-        author = author[0]
-      } else {
+      let author = (await Author.find({ name: args.author }))[0]
+      if (!author) {
         author = new Author({ name: args.author })   
         author = await author.save()
       }
       const book = new Book({ ...args, author: author._id })
       return (await book.save()).populate('author')
     },
-    editAuthor:  (root, args) => { // not yet
-      const author = authors.find(a => a.name === args.name)
+    editAuthor:  async (root, args) => {
+      const author = (await Author.find({ name: args.name }))[0]
       if (!author) {
         return null
       }
-      const newAuthor = { ...author, born: args.setBornTo }
-      authors = authors.map(a => a.name === args.name ? newAuthor : a)
-      return newAuthor
+      author.born = args.setBornTo
+      return author.save()
     },
   },
   Author: {
-    bookCount: (root) => { // not yet
-      return 0
+    bookCount: async (root) => {
+      const books = await Book.find({}).populate('author')
+      return books.reduce((sum, book) => (sum + (book.author.name === root.name)), 0)
     }
   },
 }
