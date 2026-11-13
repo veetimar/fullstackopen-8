@@ -82,7 +82,15 @@ const resolvers = {
     },
     createUser: (root, args) => {
       const user = new User({ ...args })
-      return user.save()
+      return user.save().catch(error => {
+        throw new GraphQLError(`Creating the user failed: ${error.message}`, {
+          extensions: {
+            code: 'BAD_USER_INPUT',
+            invalidArgs: args.username,
+            error
+          }
+        })
+      })
     },
     login: async (root, args) => {
       const user = await User.findOne({ username: args.username })
@@ -100,6 +108,15 @@ const resolvers = {
       }
       const token = jwt.sign(userForToken, process.env.JWT_SECRET)
       return { value: token }
+    },
+    _resetDatabase: async () => {
+      if (process.env.NODE_ENV !== 'test') {
+        throw new GraphQLError('_resetDatabase is only available in test mode')
+      }
+      await Author.deleteMany({})
+      await Book.deleteMany({})
+      await User.deleteMany({})
+      return true
     },
   },
   Author: {
