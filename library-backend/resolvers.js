@@ -1,4 +1,7 @@
 const { GraphQLError } = require('graphql')
+const jwt = require('jsonwebtoken')
+
+const User = require('./models/user')
 const Book = require('./models/book')
 const Author = require('./models/author')
 
@@ -17,10 +20,20 @@ const resolvers = {
       return books
     },
     allAuthors: () => Author.find({}).exec(),
+    me: (root, args, context) => context.currentUser,
   },
   Mutation: {
-    addBook: async (root, args) => {
-      let author = (await Author.find({ name: args.author }))[0]
+    addBook: async (root, args, context) => {
+      const currentUser = context.currentUser
+      if (!currentUser) {
+        throw new GraphQLError('not authenticated', {
+          extensions: {
+            code: 'UNAUTHENTICATED',
+          }
+        })
+      }
+
+      let author = await Author.findOne({ name: args.author })
       if (!author) {
         author = new Author({ name: args.author })
         try {
@@ -50,13 +63,43 @@ const resolvers = {
       }
       return newBook
     },
-    editAuthor:  async (root, args) => {
+    editAuthor:  async (root, args, context) => {
+      const currentUser = context.currentUser
+      if (!currentUser) {
+        throw new GraphQLError('not authenticated', {
+          extensions: {
+            code: 'UNAUTHENTICATED',
+          }
+        })
+      }
+
       const author = (await Author.find({ name: args.name }))[0]
       if (!author) {
         return null
       }
       author.born = args.setBornTo
       return author.save()
+    },
+    createUser: (root, args) => {
+      const user = new User({ ...args })
+      return user.save()
+    },
+    login: async (root, args) => {
+      const user = await User.findOne({ username: args.username })
+      if (!user || args.password !== 'secret') {
+        throw new GraphQLError('wrong credentials', {
+          extensions: {
+            code: 'BAD_USER_INPUT'
+          }
+        })
+      }
+
+      const userForToken = {
+        username: user.username,
+        id: user._id,
+      }
+      const token = jwt.sign(userForToken, process.env.JWT_SECRET)
+      return { value: token }
     },
   },
   Author: {
